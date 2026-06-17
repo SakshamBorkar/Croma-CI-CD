@@ -61,7 +61,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Lint (ruff)
-        run: pip install ruff && ruff check app/ tests/ || true
+        run: pip install ruff && ruff check app/ ../tests/ || true
 
       - name: Run tests
         env:
@@ -73,7 +73,7 @@ jobs:
           PYTHONPATH: .
         run: |
           pip install pytest pytest-asyncio httpx
-          pytest tests/ -v --tb=short -x
+          pytest ../tests/ -v --tb=short -x
 
   # ── Docker build ──────────────────────────────────────────────
   docker-build:
