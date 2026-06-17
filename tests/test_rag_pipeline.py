@@ -254,7 +254,7 @@ class TestAPIEndpoints:
         response = client.post("/api/query/", json={"query": "test query"})
         assert response.status_code == 401
 
-    @patch("app.rag.pipeline.run_query")
+    @patch("app.api.routes.run_query")
     def test_query_returns_answer(self, mock_run, client, auth_headers):
         mock_run.return_value = {
             "query": "test",
@@ -282,7 +282,7 @@ class TestAPIEndpoints:
         )
         assert response.status_code == 400
 
-    @patch("app.rag.pipeline.compare_competitors")
+    @patch("app.api.routes.compare_competitors")
     def test_compare_endpoint(self, mock_compare, client, auth_headers):
         mock_compare.return_value = {
             "ci_dimension": "financial_performance",
