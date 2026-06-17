@@ -1,0 +1,72 @@
+# ── Web Framework ──────────────────────────────────────────────
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+pydantic>=2.7.1
+pydantic-settings>=2.2.1
+
+# ── HTTP clients ────────────────────────────────────────────────
+httpx>=0.27.0
+aiohttp>=3.9.5
+requests>=2.32.2
+
+# ── Web Scraping ────────────────────────────────────────────────
+playwright>=1.44.0
+beautifulsoup4>=4.12.3
+trafilatura>=1.9.0
+newspaper3k>=0.2.8
+feedparser>=6.0.11
+
+# ── PDF Extraction ──────────────────────────────────────────────
+pymupdf>=1.24.3
+pdfplumber>=0.11.0
+
+# ── Chunking / LangChain ────────────────────────────────────────
+langchain>=0.2.1
+langchain-community>=0.2.1
+langchain-ollama>=0.1.1          # Ollama integration for LangChain
+
+# ── Embeddings (local via Ollama) ───────────────────────────────
+ollama>=0.2.1                    # Official Ollama Python SDK
+
+# ── Vector Store ────────────────────────────────────────────────
+chromadb>=0.5.3                  # Local vector DB (replaces Pinecone for Ollama stack)
+
+# ── BM25 Sparse Retrieval ───────────────────────────────────────
+rank-bm25>=0.2.2
+
+# ── Database ────────────────────────────────────────────────────
+sqlalchemy>=2.0.30
+asyncpg>=0.29.0
+alembic>=1.13.1
+psycopg2-binary>=2.9.9
+
+# ── Caching ─────────────────────────────────────────────────────
+redis>=5.0.4
+
+# ── Auth ─────────────────────────────────────────────────────────
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+python-multipart>=0.0.9
+
+# ── Rate Limiting ────────────────────────────────────────────────
+slowapi>=0.1.9
+
+# ── Scheduling / Airflow ─────────────────────────────────────────
+# NOTE: apache-airflow 2.9.1 does not support Python 3.13.
+# Since the backend does not import airflow, these are commented out for local Python 3.13 setup.
+# Airflow runs successfully inside the Docker Compose stack (which runs Python 3.11).
+# apache-airflow>=2.9.1
+# apache-airflow-providers-postgres>=5.10.2
+
+# ── Export ──────────────────────────────────────────────────────
+weasyprint>=62.3                 # PDF generation (server-side)
+python-pptx>=0.6.23
+
+# ── Utilities ────────────────────────────────────────────────────
+python-dotenv>=1.0.1
+tenacity>=8.3.0                  # Retry with exponential backoff
+
+loguru>=0.7.2
+tqdm>=4.66.4
+pandas>=2.2.3
+numpy>=2.1.0
