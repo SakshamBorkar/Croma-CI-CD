@@ -23,7 +23,9 @@ pdfplumber>=0.11.0
 # ── Chunking / LangChain ────────────────────────────────────────
 langchain>=0.2.1
 langchain-community>=0.2.1
+langchain-text-splitters>=0.2.1       # Used in chunker.py
 langchain-ollama>=0.1.1          # Ollama integration for LangChain
+
 
 # ── Embeddings (local via Ollama) ───────────────────────────────
 ollama>=0.2.1                    # Official Ollama Python SDK
