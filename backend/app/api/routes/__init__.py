@@ -223,22 +223,32 @@ health_router = APIRouter(prefix="/api/health", tags=["health"])
 @health_router.get("/")
 async def health_check() -> Dict[str, Any]:
     """Health check — returns service status and component availability."""
-    import ollama as ol
+    groq_ok = bool(settings.GROQ_API_KEY)
+    groq_models = [settings.GROQ_MODEL] if groq_ok else []
 
-    # Check Ollama
+    # Optional Ollama check
+    ollama_ok = False
+    ollama_models = []
     try:
+        import ollama as ol
         models = ol.list()
         ollama_ok = True
-        available_models = [m["name"] for m in models.get("models", [])]
-    except Exception as e:
+        if hasattr(models, 'models'):
+            ollama_models = [m.model for m in models.models]
+        elif isinstance(models, dict):
+            ollama_models = [m.get("model", m.get("name", "")) for m in models.get("models", [])]
+    except Exception:
         ollama_ok = False
-        available_models = []
+
+    is_healthy = groq_ok or ollama_ok
 
     return {
-        "status": "healthy" if ollama_ok else "degraded",
+        "status": "healthy" if is_healthy else "degraded",
         "timestamp": datetime.utcnow().isoformat(),
         "components": {
-            "ollama": {"ok": ollama_ok, "models": available_models},
+            "groq": {"ok": groq_ok, "models": groq_models},
+            "embeddings": {"ok": True, "provider": settings.EMBEDDING_PROVIDER, "model": settings.LOCAL_EMBED_MODEL},
+            "ollama": {"ok": ollama_ok, "models": ollama_models},
             "api": {"ok": True},
         },
     }
