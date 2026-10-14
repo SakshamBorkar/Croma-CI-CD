@@ -7,7 +7,7 @@ Registers:
   - CORS middleware
   - Rate limiting (slowapi)
   - All API routers
-  - Startup: DB init + Ollama model availability check
+  - Startup: DB init + Ollama model availability check0
 """
 
 from contextlib import asynccontextmanager
@@ -41,33 +41,50 @@ async def lifespan(app: FastAPI):
     logger.info("Starting Croma CI Platform...")
 
     # Init database tables
-    await init_db()
-    logger.info("Database tables initialised")
-
-    # Verify Ollama is reachable
     try:
-        import ollama
-        models_response = ollama.list()
-        model_names = []
-        if hasattr(models_response, 'models'):
-            model_names = [m.model for m in models_response.models]
-        elif isinstance(models_response, dict):
-            model_names = [m.get("model", m.get("name", "")) for m in models_response.get("models", [])]
-        logger.info(f"Ollama available. Models: {model_names}")
-
-        if settings.OLLAMA_LLM_MODEL not in str(model_names):
-            logger.warning(
-                f"LLM model '{settings.OLLAMA_LLM_MODEL}' not found. "
-                f"Run: ollama pull {settings.OLLAMA_LLM_MODEL}"
-            )
-        if settings.OLLAMA_EMBED_MODEL not in str(model_names):
-            logger.warning(
-                f"Embed model '{settings.OLLAMA_EMBED_MODEL}' not found. "
-                f"Run: ollama pull {settings.OLLAMA_EMBED_MODEL}"
-            )
+        await init_db()
+        logger.info("Database tables initialised")
     except Exception as e:
-        logger.error(f"Ollama not reachable at {settings.OLLAMA_BASE_URL}: {e}")
-        logger.warning("Starting in degraded mode — RAG queries will fail until Ollama is running.")
+        logger.error(f"Database not reachable at {settings.DATABASE_URL}: {e}")
+        logger.warning("Database unavailable — check that PostgreSQL Docker container is running on port 5435.")
+
+    # Verify LLM & Embeddings are ready
+    if settings.GROQ_API_KEY:
+        try:
+            from groq import Groq
+            client = Groq(api_key=settings.GROQ_API_KEY)
+            client.models.list()
+            logger.info(f"Groq LLM connected. Active model: {settings.GROQ_MODEL}")
+        except Exception as e:
+            logger.error(f"Groq connection check failed: {e}")
+    else:
+        # Verify Ollama is reachable
+        try:
+            import ollama
+            models_response = ollama.list()
+            model_names = []
+            if hasattr(models_response, 'models'):
+                model_names = [m.model for m in models_response.models]
+            elif isinstance(models_response, dict):
+                model_names = [m.get("model", m.get("name", "")) for m in models_response.get("models", [])]
+            logger.info(f"Ollama available. Models: {model_names}")
+
+            if settings.OLLAMA_LLM_MODEL not in str(model_names):
+                logger.warning(
+                    f"LLM model '{settings.OLLAMA_LLM_MODEL}' not found. "
+                    f"Run: ollama pull {settings.OLLAMA_LLM_MODEL}"
+                )
+            if settings.OLLAMA_EMBED_MODEL not in str(model_names):
+                logger.warning(
+                    f"Embed model '{settings.OLLAMA_EMBED_MODEL}' not found. "
+                    f"Run: ollama pull {settings.OLLAMA_EMBED_MODEL}"
+                )
+        except Exception as e:
+            logger.error(f"Ollama not reachable at {settings.OLLAMA_BASE_URL}: {e}")
+            logger.warning("Starting in degraded mode — RAG queries will fail until Ollama is running.")
+
+    if getattr(settings, "EMBEDDING_PROVIDER", "local") == "local":
+        logger.info("Local ONNX fast embeddings active (all-MiniLM-L6-v2, 384 dims)")
 
     yield  # ── App runs ───────────────────────────────────────────
     logger.info("Shutting down...")

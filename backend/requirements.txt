@@ -25,6 +25,9 @@ langchain>=0.2.1
 langchain-community>=0.2.1
 langchain-text-splitters>=0.2.1       # Used in chunker.py
 langchain-ollama>=0.1.1          # Ollama integration for LangChain
+langgraph>=0.2.0
+duckduckgo-search>=6.0.0
+groq>=1.7.0
 
 
 # ── Embeddings (local via Ollama) ───────────────────────────────

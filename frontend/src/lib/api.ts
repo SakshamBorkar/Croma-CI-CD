@@ -38,6 +38,18 @@ export interface QueryResponse {
   citations: Citation[];
   confidence_score: number;
   sub_query_count: number;
+  competitors?: Record<string, DimensionResult>;
+  validation_summary?: {
+    total_checks: number;
+    passed: boolean;
+    issues: Array<{ competitor: string; claim: string; reason: string; passed: boolean }>;
+  };
+  agent_traces?: {
+    research_agent?: { active: boolean; findings_count: number; findings?: any[] };
+    rag_agent?: { active: boolean; chunks_count: number };
+    analysis_agent?: { active: boolean; competitors_analyzed: number };
+    validation_agent?: { active: boolean; issues_count: number; confidence_score: number };
+  };
 }
 
 export interface CompareResponse {

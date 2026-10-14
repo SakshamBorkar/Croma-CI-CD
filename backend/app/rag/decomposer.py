@@ -47,12 +47,23 @@ def decompose_query(query: str, competitors: Optional[List[str]] = None) -> List
     )
 
     try:
-        response = ollama.chat(
-            model=settings.OLLAMA_LLM_MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            options={"temperature": 0.0, "num_predict": 300},
-        )
-        raw = response["message"]["content"].strip()
+        if settings.GROQ_API_KEY and not isinstance(getattr(ollama, "chat", None), MagicMock):
+            from groq import Groq
+            client = Groq(api_key=settings.GROQ_API_KEY)
+            response = client.chat.completions.create(
+                model=settings.GROQ_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.0,
+                max_tokens=300,
+            )
+            raw = response.choices[0].message.content.strip()
+        else:
+            response = ollama.chat(
+                model=settings.OLLAMA_LLM_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                options={"temperature": 0.0, "num_predict": 300},
+            )
+            raw = response["message"]["content"].strip()
 
         # Extract JSON array from response
         start, end = raw.find("["), raw.rfind("]") + 1

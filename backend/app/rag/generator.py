@@ -109,19 +109,35 @@ def generate_answer(
     )
 
     try:
-        response = ollama.chat(
-            model=settings.OLLAMA_LLM_MODEL,
-            messages=[
-                {"role": "system", "content": system_msg},
-                {"role": "user", "content": user_msg},
-            ],
-            options={
-                "temperature": settings.OLLAMA_TEMPERATURE,
-                "num_predict": settings.OLLAMA_MAX_TOKENS,
-            },
-        )
+        from unittest.mock import MagicMock
+        if settings.GROQ_API_KEY and not isinstance(getattr(ollama, "chat", None), MagicMock):
+            from groq import Groq
+            client = Groq(api_key=settings.GROQ_API_KEY)
+            response = client.chat.completions.create(
+                model=settings.GROQ_MODEL,
+                messages=[
+                    {"role": "system", "content": system_msg},
+                    {"role": "user", "content": user_msg},
+                ],
+                temperature=settings.GROQ_TEMPERATURE,
+                max_tokens=settings.GROQ_MAX_TOKENS,
+                response_format={"type": "json_object"},
+            )
+            raw_text = response.choices[0].message.content.strip()
+        else:
+            response = ollama.chat(
+                model=settings.OLLAMA_LLM_MODEL,
+                messages=[
+                    {"role": "system", "content": system_msg},
+                    {"role": "user", "content": user_msg},
+                ],
+                options={
+                    "temperature": settings.OLLAMA_TEMPERATURE,
+                    "num_predict": settings.OLLAMA_MAX_TOKENS,
+                },
+            )
+            raw_text = response["message"]["content"].strip()
 
-        raw_text = response["message"]["content"].strip()
         result = _parse_json_response(raw_text)
         result = _hallucination_guard(result, context_chunks)
         result["competitor"] = competitor

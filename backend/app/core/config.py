@@ -25,6 +25,16 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     ALLOWED_ORIGINS: List[str] = ["http://localhost:3000", "https://croma-ci.vercel.app"]
 
+    # ── Groq LLM (High-speed cloud inference) ────────────────────
+    GROQ_API_KEY: str = Field(default="", description="Groq API key")
+    GROQ_MODEL: str = Field(default="openai/gpt-oss-120b", description="Groq model (e.g. openai/gpt-oss-120b, openai/gpt-oss-20b, qwen/qwen3.8-27b)")
+    GROQ_TEMPERATURE: float = 0.1
+    GROQ_MAX_TOKENS: int = 2000
+
+    # ── Embedding Provider ──────────────────────────────────────
+    EMBEDDING_PROVIDER: str = Field(default="local", description="Embedding provider: local | ollama")
+    LOCAL_EMBED_DIMS: int = 384
+
     # ── Ollama ──────────────────────────────────────────────────
     # Run `ollama pull mistral` or `ollama pull llama3` before starting
     OLLAMA_BASE_URL: str = Field(default="http://localhost:11434", description="Ollama server URL")

@@ -1,27 +1,23 @@
 """
-app/rag/pipeline.py
-────────────────────
-Full RAG pipeline orchestrator.
+app/rag/pipeline.py (LangGraph Delegation Wrapper)
+──────────────────────────────────────────────────
+Full RAG pipeline orchestrator delegating to LangGraph multi-agent workflow.
 
-Flow:
-  query → decompose → [sub-query → retrieve → generate] → merge → return
-
-Also exposes:
+Exposes:
+  - run_query: natural language query across agents
+  - compare_competitors: compare all competitors for one dimension
   - full_competitor_report: generate all dimensions for one competitor
-  - compare: compare all competitors for one dimension
 """
-
 import asyncio
 from datetime import date
 from typing import Any, Dict, List, Optional
 
 from loguru import logger
 
+from app.agents.orchestrator import ci_graph
+from app.agents.state import CIPipelineState
 from app.core.cache import cache_get, cache_set
 from app.core.config import settings
-from app.rag.decomposer import decompose_query_async
-from app.rag.generator import generate_answer_async
-from app.rag.retriever import retrieve
 
 
 async def run_query(
@@ -32,56 +28,68 @@ async def run_query(
 ) -> Dict[str, Any]:
     """
     Main entry point: free-form NL query with optional filters.
-    Returns merged answer from all sub-queries.
+    Executes through the multi-agent LangGraph workflow.
     """
     cache_key_extra = f"{competitor or 'all'}::{ci_dimension or 'all'}"
-
     if use_cache:
         cached = await cache_get(query, cache_key_extra)
         if cached:
             return cached
 
-    # Step 1: Decompose
-    sub_queries = await decompose_query_async(query, competitors=[competitor] if competitor else None)
+    initial_state: CIPipelineState = {
+        "query": query,
+        "competitor": competitor,
+        "ci_dimension": ci_dimension,
+        "use_cache": use_cache,
+        "needs_web_research": True,
+        "current_agent": "init",
+        "iteration_count": 0,
+        "web_findings": [],
+        "knowledge_base_chunks": [],
+        "raw_insights": [],
+        "validation_issues": [],
+        "final_report": {},
+        "errors": [],
+    }
 
-    # Step 2: Retrieve + Generate for each sub-query (concurrent)
-    tasks = []
-    for sq in sub_queries:
-        tasks.append(
-            _retrieve_and_generate(sq, competitor, ci_dimension or "general")
-        )
+    result = await ci_graph.ainvoke(initial_state)
+    report = result.get("final_report", {})
+    insights = list(report.get("competitors", {}).values())
 
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-    valid_results = [r for r in results if isinstance(r, dict)]
-
-    if not valid_results:
-        return {"error": "No results found", "query": query}
-
-    # Step 3: Merge sub-results
-    merged = _merge_results(valid_results, original_query=query)
+    response = {
+        "query": query,
+        "summary": " ".join(i.get("summary", "") for i in insights[:3]),
+        "key_metrics": [m for i in insights for m in i.get("key_metrics", [])][:20],
+        "citations": [c for i in insights for c in i.get("citations", [])][:15],
+        "confidence_score": report.get("overall_confidence", 0.0),
+        "sub_query_count": len(insights),
+        "competitors": report.get("competitors", {}),
+        "validation_summary": report.get("validation_summary", {}),
+        "agent_traces": {
+            "research_agent": {
+                "active": len(result.get("web_findings", [])) > 0,
+                "findings_count": len(result.get("web_findings", [])),
+                "findings": result.get("web_findings", [])[:6],
+            },
+            "rag_agent": {
+                "active": len(result.get("knowledge_base_chunks", [])) > 0,
+                "chunks_count": len(result.get("knowledge_base_chunks", [])),
+            },
+            "analysis_agent": {
+                "active": len(result.get("raw_insights", [])) > 0,
+                "competitors_analyzed": len(insights),
+            },
+            "validation_agent": {
+                "active": True,
+                "issues_count": len(result.get("validation_issues", [])),
+                "confidence_score": report.get("overall_confidence", 0.0),
+            },
+        },
+    }
 
     if use_cache:
-        await cache_set(query, merged, cache_key_extra)
-
-    return merged
-
-
-_ollama_semaphore = asyncio.Semaphore(1)
-
-
-async def _retrieve_and_generate(
-    query: str, competitor: Optional[str], ci_dimension: str
-) -> Dict[str, Any]:
-    async with _ollama_semaphore:
-        chunks = await retrieve(query, competitor=competitor, ci_dimension_filter=ci_dimension)
-        if not chunks:
-            logger.warning(f"No chunks retrieved for sub-query: {query[:60]}")
-            return {
-                "summary": "Insufficient public data available for this dimension.",
-                "key_metrics": [], "citations": [], "confidence_score": 0.0,
-            }
-        return await generate_answer_async(query, chunks, competitor or "all", ci_dimension)
-
+        await cache_set(query, response, cache_key_extra)
+    return response
 
 
 async def compare_competitors(
@@ -90,9 +98,9 @@ async def compare_competitors(
     use_cache: bool = True,
 ) -> Dict[str, Any]:
     """
-    Generate CI answers for all 5 competitors for one dimension, concurrently.
+    Compare all 5 competitors on a single dimension via the LangGraph workflow.
     """
-    effective_query = query or f"Provide a comprehensive analysis of {ci_dimension} for this competitor"
+    effective_query = query or f"Provide a comprehensive analysis of {ci_dimension}"
     cache_key = f"compare::{ci_dimension}"
 
     if use_cache:
@@ -100,32 +108,34 @@ async def compare_competitors(
         if cached:
             return cached
 
-    tasks = {
-        comp: _retrieve_and_generate(
-            effective_query.format(competitor=comp.replace("_", " ").title()),
-            comp,
-            ci_dimension,
-        )
-        for comp in settings.COMPETITORS
+    initial_state: CIPipelineState = {
+        "query": effective_query,
+        "competitor": None,
+        "ci_dimension": ci_dimension,
+        "use_cache": False,
+        "needs_web_research": True,
+        "current_agent": "init",
+        "iteration_count": 0,
+        "web_findings": [],
+        "knowledge_base_chunks": [],
+        "raw_insights": [],
+        "validation_issues": [],
+        "final_report": {},
+        "errors": [],
     }
 
-    results_list = await asyncio.gather(*tasks.values(), return_exceptions=True)
-    comparison = {}
-    for comp, result in zip(tasks.keys(), results_list):
-        if isinstance(result, dict):
-            comparison[comp] = result
-        else:
-            comparison[comp] = {"summary": "Error retrieving data", "confidence_score": 0.0}
+    result = await ci_graph.ainvoke(initial_state)
+    report = result.get("final_report", {})
 
     output = {
         "ci_dimension": ci_dimension,
         "generated_at": date.today().isoformat(),
-        "competitors": comparison,
+        "competitors": report.get("competitors", {}),
+        "overall_confidence": report.get("overall_confidence", 0.0),
     }
 
     if use_cache:
         await cache_set(effective_query, output, cache_key)
-
     return output
 
 
@@ -134,7 +144,7 @@ async def full_competitor_report(
     use_cache: bool = True,
 ) -> Dict[str, Any]:
     """
-    Generate complete CI report for one competitor across all dimensions.
+    Generate complete CI report for one competitor across all dimensions using LangGraph.
     """
     cache_key = f"report::{competitor}"
     dummy_query = f"full report {competitor}"
@@ -146,15 +156,38 @@ async def full_competitor_report(
 
     tasks = {}
     for dim in settings.CI_DIMENSIONS:
-        q = f"Provide a comprehensive analysis of {dim.replace('_',' ')} for {competitor.replace('_',' ').title()}"
-        tasks[dim] = _retrieve_and_generate(q, competitor, dim)
+        q = f"Provide a comprehensive analysis of {dim.replace('_', ' ')} for {competitor.replace('_', ' ').title()}"
+        initial_state: CIPipelineState = {
+            "query": q,
+            "competitor": competitor,
+            "ci_dimension": dim,
+            "use_cache": False,
+            "needs_web_research": False,
+            "current_agent": "init",
+            "iteration_count": 0,
+            "web_findings": [],
+            "knowledge_base_chunks": [],
+            "raw_insights": [],
+            "validation_issues": [],
+            "final_report": {},
+            "errors": [],
+        }
+        tasks[dim] = ci_graph.ainvoke(initial_state)
 
     results_list = await asyncio.gather(*tasks.values(), return_exceptions=True)
     dimensions = {}
-    for dim, result in zip(tasks.keys(), results_list):
-        dimensions[dim] = result if isinstance(result, dict) else {
-            "summary": "Error", "confidence_score": 0.0
-        }
+    for dim, res in zip(tasks.keys(), results_list):
+        if isinstance(res, dict):
+            report = res.get("final_report", {})
+            insights = report.get("competitors", {})
+            comp_insight = insights.get(competitor, {})
+            dimensions[dim] = comp_insight or {
+                "summary": "Insufficient public data available for this dimension.",
+                "confidence_score": 0.0,
+            }
+        else:
+            logger.error(f"Error evaluating dimension {dim} for {competitor}: {res}")
+            dimensions[dim] = {"summary": "Error generating dimension data", "confidence_score": 0.0}
 
     report = {
         "competitor": competitor,
@@ -168,41 +201,6 @@ async def full_competitor_report(
         await cache_set(dummy_query, report, cache_key)
 
     return report
-
-
-# ─── Helpers ─────────────────────────────────────────────────────
-def _merge_results(results: List[Dict[str, Any]], original_query: str) -> Dict[str, Any]:
-    """Merge multiple sub-query results into a single response."""
-    all_metrics = []
-    all_citations = []
-    summaries = []
-    scores = []
-
-    for r in results:
-        if r.get("summary"):
-            summaries.append(r["summary"])
-        all_metrics.extend(r.get("key_metrics", []))
-        all_citations.extend(r.get("citations", []))
-        if r.get("confidence_score") is not None:
-            scores.append(r["confidence_score"])
-
-    # Deduplicate citations by source+date
-    seen = set()
-    unique_citations = []
-    for c in all_citations:
-        key = (c.get("source"), c.get("date"))
-        if key not in seen:
-            seen.add(key)
-            unique_citations.append(c)
-
-    return {
-        "query": original_query,
-        "summary": " ".join(summaries[:3]),   # top 3 summaries
-        "key_metrics": all_metrics[:20],
-        "citations": unique_citations[:15],
-        "confidence_score": sum(scores) / len(scores) if scores else 0.0,
-        "sub_query_count": len(results),
-    }
 
 
 def _avg_confidence(dimensions: Dict[str, Any]) -> float:

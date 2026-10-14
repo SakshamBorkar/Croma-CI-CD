@@ -43,6 +43,9 @@ class QueryResponse(BaseModel):
     citations: List[Dict[str, Any]] = []
     confidence_score: float
     sub_query_count: int = 1
+    competitors: Optional[Dict[str, Any]] = None
+    validation_summary: Optional[Dict[str, Any]] = None
+    agent_traces: Optional[Dict[str, Any]] = None
 
 
 @query_router.post("/", response_model=QueryResponse)
