@@ -31,8 +31,34 @@ export interface DimensionResult {
   query?: string;
 }
 
+export interface UserDocument {
+  document_id: string;
+  filename: string;
+  file_type: string;
+  file_size: number;
+  created_at: string;
+  status: "processing" | "ready" | "failed";
+  stage: "uploading" | "extracting" | "chunking" | "embedding" | "ready" | "error";
+  chunk_count: number;
+  page_count: number;
+  error_message?: string | null;
+}
+
+export interface DocumentPreview {
+  document_id: string;
+  filename: string;
+  file_type: string;
+  file_size: number;
+  page_count: number;
+  sections: string[];
+  preview_text: string;
+}
+
 export interface QueryResponse {
   query: string;
+  selected_mode?: "auto" | "research" | "rag" | "analysis" | "validation";
+  source_scope?: "uploaded_only" | "croma_kb" | "uploaded_and_croma" | "all_sources";
+  primary_agent?: string;
   summary: string;
   key_metrics: KeyMetric[];
   citations: Citation[];
@@ -44,9 +70,18 @@ export interface QueryResponse {
     passed: boolean;
     issues: Array<{ competitor: string; claim: string; reason: string; passed: boolean }>;
   };
+  missing_information?: string[];
+  conflicts?: Array<{ competitor?: string; claim?: string; description?: string }>;
+  selected_agents?: string[];
+  plan_rationale?: string;
   agent_traces?: {
+    selected_mode?: string;
+    source_scope?: string;
+    primary_agent?: string;
+    plan_rationale?: string;
+    selected_agents?: string[];
     research_agent?: { active: boolean; findings_count: number; findings?: any[] };
-    rag_agent?: { active: boolean; chunks_count: number };
+    rag_agent?: { active: boolean; chunks_count: number; uploaded_chunks_count?: number };
     analysis_agent?: { active: boolean; competitors_analyzed: number };
     validation_agent?: { active: boolean; issues_count: number; confidence_score: number };
   };
@@ -152,18 +187,95 @@ export async function login(username: string, password: string): Promise<void> {
   setToken(data.access_token);
 }
 
-// ── CI endpoints ──────────────────────────────────────────────────
+// ── CI & Agentic endpoints ───────────────────────────────────────
 
 export async function freeFormQuery(
   query: string,
   competitor?: string,
   ciDimension?: string,
-  useCache = true
+  useCache = true,
+  selectedMode: "auto" | "research" | "rag" | "analysis" | "validation" = "auto",
+  sourceScope: "uploaded_only" | "croma_kb" | "uploaded_and_croma" | "all_sources" = "all_sources",
+  selectedDocumentIds: string[] = []
 ): Promise<QueryResponse> {
   return apiFetch("/api/query/", {
     method: "POST",
-    body: JSON.stringify({ query, competitor, ci_dimension: ciDimension, use_cache: useCache }),
+    body: JSON.stringify({
+      query,
+      competitor: competitor || undefined,
+      ci_dimension: ciDimension || undefined,
+      use_cache: useCache,
+      selected_mode: selectedMode,
+      source_scope: sourceScope,
+      selected_document_ids: selectedDocumentIds,
+    }),
   });
+}
+
+export const queryCI = freeFormQuery;
+
+export async function queryAgentic(
+  query: string,
+  selectedMode: "auto" | "research" | "rag" | "analysis" | "validation" = "auto",
+  sourceScope: "uploaded_only" | "croma_kb" | "uploaded_and_croma" | "all_sources" = "all_sources",
+  selectedDocumentIds: string[] = [],
+  competitor?: string,
+  ciDimension?: string
+): Promise<QueryResponse & { run_id: string }> {
+  return apiFetch("/api/agentic/query", {
+    method: "POST",
+    body: JSON.stringify({
+      query,
+      selected_mode: selectedMode,
+      source_scope: sourceScope,
+      selected_document_ids: selectedDocumentIds,
+      competitor,
+      ci_dimension: ciDimension,
+    }),
+  });
+}
+
+// ── Document Management endpoints ─────────────────────────────────
+
+export async function uploadDocuments(files: File[]): Promise<UserDocument[]> {
+  const token = getToken();
+  const formData = new FormData();
+  for (const file of files) {
+    formData.append("files", file);
+  }
+
+  const res = await fetch(`${BASE_URL}/api/documents/upload`, {
+    method: "POST",
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(errorText || "Document upload failed");
+  }
+
+  return res.json();
+}
+
+export async function getDocuments(): Promise<UserDocument[]> {
+  return apiFetch("/api/documents/");
+}
+
+export async function getDocument(documentId: string): Promise<UserDocument> {
+  return apiFetch(`/api/documents/${documentId}`);
+}
+
+export async function deleteDocument(documentId: string): Promise<void> {
+  await apiFetch(`/api/documents/${documentId}`, {
+    method: "DELETE",
+  });
+}
+
+export async function getDocumentPreview(documentId: string): Promise<DocumentPreview> {
+  return apiFetch(`/api/documents/${documentId}/preview`);
 }
 
 export async function compareCompetitors(

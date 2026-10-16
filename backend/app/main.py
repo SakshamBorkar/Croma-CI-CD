@@ -26,6 +26,8 @@ from app.api.routes import (
     query_router,
     report_router,
     sources_router,
+    documents_router,
+    agentic_router,
 )
 from app.core.auth import auth_router
 from app.core.config import settings
@@ -118,6 +120,8 @@ def create_app() -> FastAPI:
     app.include_router(report_router)
     app.include_router(sources_router)
     app.include_router(health_router)
+    app.include_router(documents_router)
+    app.include_router(agentic_router)
 
     @app.get("/")
     async def root():

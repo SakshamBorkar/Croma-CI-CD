@@ -144,7 +144,7 @@ function DimensionCard({ dimSlug, dimDisplay, data }: {
 
 // ── Main ReportView ───────────────────────────────────────────────
 export default function ReportView() {
-  const [selectedCompetitor, setSelectedCompetitor] = useState(COMPETITORS[0].slug);
+  const [selectedCompetitor, setSelectedCompetitor] = useState<string>(COMPETITORS[0].slug);
   const [report, setReport] = useState<CompetitorReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);

@@ -1,40 +1,37 @@
-# Croma CI Platform — Complete Setup Guide
+# Croma CI Platform — Multi-Agent Architecture
 
 > **Gen AI Competitive Intelligence for Indian Electronics Retail**  
-> Stack: FastAPI · Ollama (local LLM) · ChromaDB · PostgreSQL · Redis · Airflow · Next.js 14
+> Stack: FastAPI · LangGraph Orchestrator · Groq Cloud LLM · Local ONNX Embeddings · ChromaDB · PostgreSQL · Redis · Next.js 14
 
 ---
 
 ## Architecture Overview
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        FRONTEND (Next.js 14)                        │
-│  CI Matrix │ NL Search │ Competitor Reports │ Sources │ Health       │
-└─────────────────────────┬───────────────────────────────────────────┘
-                          │ REST + JWT
-┌─────────────────────────▼───────────────────────────────────────────┐
-│                       BACKEND (FastAPI)                              │
-│  /api/query  /api/compare  /api/report  /api/sources  /api/health   │
-│                                                                      │
-│  RAG Pipeline:                                                       │
-│  Query → Decompose → [Embed → ChromaDB Dense] + [BM25 Sparse]       │
-│       → RRF Fusion → Ollama LLM → Structured JSON answer            │
-└──────┬──────────────────┬──────────────────────┬───────────────────┘
-       │                  │                       │
-┌──────▼──────┐  ┌────────▼────────┐  ┌──────────▼──────────┐
-│  Ollama     │  │   ChromaDB      │  │  PostgreSQL + Redis  │
-│  mistral    │  │  (local vector  │  │  metadata · cache    │
-│  nomic-     │  │   store, 5      │  │  snapshots · reports │
-│  embed-text │  │   collections)  │  │                      │
-└─────────────┘  └─────────────────┘  └──────────────────────┘
-       ▲
-┌──────┴────────────────────────────────────────────────────────────┐
-│                    AIRFLOW DAGs                                    │
-│  ci_ingestion_weekly  (Sun 02:00 IST) — full scrape + embed      │
-│  ci_news_daily        (Daily 06:00 IST) — RSS news               │
-│  ci_report_generate   (Mon 07:00 IST) — generate + store reports │
-└───────────────────────────────────────────────────────────────────┘
+                                      ┌──────────────┐
+                                      │  User query  │
+                                      └──────┬───────┘
+                                             │
+                                             ▼
+                     ┌────────────────────────────────────────────────┐
+                     │            Orchestrator — LangGraph            │
+                     │  Maintains state, selects tasks, delegates     │
+                     │  work, and controls completion.                │
+                     │                                                │
+                     │  ┌────────────────────┐ ┌────────────────────┐ │
+                     │  │   Research agent   │ │     RAG agent      │ │
+                     │  │  Web search/crawl  │ │  ChromaDB + BM25   │ │
+                     │  └────────────────────┘ └────────────────────┘ │
+                     │  ┌────────────────────┐ ┌────────────────────┐ │
+                     │  │   Analysis agent   │ │  Validation agent  │ │
+                     │  │  Trends/Comparison │ │  Citation checks   │ │
+                     │  └────────────────────┘ └────────────────────┘ │
+                     └───────────────────────┬────────────────────────┘
+                                             │
+                                             ▼
+                                      ┌──────────────┐
+                                      │ Final report │
+                                      └──────────────┘
 ```
 
 ---

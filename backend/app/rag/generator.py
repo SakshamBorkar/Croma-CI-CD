@@ -161,6 +161,102 @@ async def generate_answer_async(
     return await loop.run_in_executor(None, generate_answer, query, context_chunks, competitor, ci_dimension)
 
 
+SYNTHESIS_SYSTEM_PROMPT = """You are a senior competitive intelligence analyst specializing in the Indian consumer electronics retail sector.
+Synthesize the provided competitor intelligence into a comprehensive, articulate Natural Language report directly answering the user's inquiry.
+Structure your response in well-formatted Markdown:
+- **Executive Summary**: A concise, direct answer to the user query.
+- **Competitor Analysis & Comparison**: Comparative breakdown covering products, pricing models, store expansion, and recent strategic moves based on the retrieved evidence.
+- **Key Empirical Metrics**: Highlights of revenues, store footprints, or margins.
+- **Market Implications**: Strategic takeaways for Croma.
+Grounded strictly in the retrieved evidence. Do not hallucinate or output generic placeholder text."""
+
+
+def generate_synthesis(
+    query: str,
+    insights: List[Dict[str, Any]],
+    context_chunks: List[Dict[str, Any]],
+) -> str:
+    """Generate a cohesive cross-competitor Natural Language synthesized answer based on retrieved evidence."""
+    # Build text corpus from insights and chunks
+    evidence_lines = []
+    for ins in insights:
+        comp_name = ins.get("competitor", "Competitor").replace("_", " ").title()
+        if ins.get("summary") and "Insufficient" not in ins.get("summary", ""):
+            evidence_lines.append(f"### {comp_name}\nSummary: {ins['summary']}")
+            for m in ins.get("key_metrics", []):
+                evidence_lines.append(f"- Metric: {m.get('metric')} = {m.get('value')} ({m.get('period')})")
+
+    for idx, c in enumerate(context_chunks[:12], 1):
+        meta = c.get("metadata", {})
+        comp = meta.get("competitor", "").replace("_", " ").title()
+        text = c.get("text", "").strip()
+        if text:
+            evidence_lines.append(f"[{idx}] {comp} Source: {meta.get('source_url', 'Doc')}\n{text}")
+
+    evidence_text = "\n\n".join(evidence_lines)
+    if not evidence_text.strip():
+        return "Insufficient public data available across the retrieved sources to formulate a comprehensive answer."
+
+    user_prompt = f"""User Query: {query}
+
+Retrieved Intelligence & Evidence Chunks:
+---
+{evidence_text[:10000]}
+---
+
+Provide a comprehensive, authoritative Natural Language synthesized answer answering the query above."""
+
+    try:
+        if settings.GROQ_API_KEY:
+            from groq import Groq
+            client = Groq(api_key=settings.GROQ_API_KEY)
+            resp = client.chat.completions.create(
+                model=settings.GROQ_MODEL,
+                messages=[
+                    {"role": "system", "content": SYNTHESIS_SYSTEM_PROMPT},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=0.2,
+                max_tokens=1500,
+            )
+            return resp.choices[0].message.content.strip()
+        else:
+            resp = ollama.chat(
+                model=settings.OLLAMA_LLM_MODEL,
+                messages=[
+                    {"role": "system", "content": SYNTHESIS_SYSTEM_PROMPT},
+                    {"role": "user", "content": user_prompt},
+                ],
+                options={"temperature": 0.2, "num_predict": 1200},
+            )
+            return resp["message"]["content"].strip()
+    except Exception as e:
+        logger.warning(f"Synthesis LLM call failed ({e}). Generating fallback structured NL answer.")
+        # Fallback high quality NL synthesis from extracted evidence
+        sections = [f"### Competitive Intelligence Synthesis for: \"{query}\"\n"]
+        for ins in insights:
+            comp_name = ins.get("competitor", "Competitor").replace("_", " ").title()
+            if ins.get("summary") and "Insufficient" not in ins["summary"]:
+                sections.append(f"**{comp_name}**: {ins['summary']}")
+                if ins.get("key_metrics"):
+                    metric_str = ", ".join(f"{m.get('metric')}: {m.get('value')}" for m in ins["key_metrics"][:3])
+                    sections.append(f"*Key Metrics*: {metric_str}\n")
+        if len(sections) > 1:
+            return "\n\n".join(sections)
+        return "Based on the retrieved knowledge base, insufficient public data is available to compare the requested dimensions."
+
+
+async def generate_synthesis_async(
+    query: str,
+    insights: List[Dict[str, Any]],
+    context_chunks: List[Dict[str, Any]],
+) -> str:
+    import asyncio
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, generate_synthesis, query, insights, context_chunks)
+
+
+
 # ─── JSON parser with fallback ────────────────────────────────────
 def _parse_json_response(raw: str) -> Dict[str, Any]:
     """Extract JSON from LLM output — handle markdown code fences."""

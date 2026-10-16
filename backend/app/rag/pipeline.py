@@ -25,12 +25,17 @@ async def run_query(
     competitor: Optional[str] = None,
     ci_dimension: Optional[str] = None,
     use_cache: bool = True,
+    selected_mode: str = "auto",
+    source_scope: str = "all_sources",
+    selected_document_ids: Optional[List[str]] = None,
+    user_id: Optional[str] = "demo_user",
 ) -> Dict[str, Any]:
     """
-    Main entry point: free-form NL query with optional filters.
-    Executes through the multi-agent LangGraph workflow.
+    Main entry point: free-form NL query with user-controlled agent mode and document scoping.
+    Executes through the dynamic LangGraph multi-agent workflow.
     """
-    cache_key_extra = f"{competitor or 'all'}::{ci_dimension or 'all'}"
+    doc_ids_key = ",".join(sorted(selected_document_ids or []))
+    cache_key_extra = f"{competitor or 'all'}::{ci_dimension or 'all'}::{selected_mode}::{source_scope}::{doc_ids_key}"
     if use_cache:
         cached = await cache_get(query, cache_key_extra)
         if cached:
@@ -41,13 +46,26 @@ async def run_query(
         "competitor": competitor,
         "ci_dimension": ci_dimension,
         "use_cache": use_cache,
-        "needs_web_research": True,
+        "user_id": user_id or "demo_user",
+        "selected_mode": selected_mode,
+        "source_scope": source_scope,
+        "selected_document_ids": selected_document_ids or [],
+        "document_processing_status": {},
+        "uploaded_document_references": [],
+        "needs_web_research": selected_mode == "research" or (selected_mode == "auto"),
+        "needs_rag_retrieval": True,
+        "selected_agents": [],
+        "plan_rationale": "",
         "current_agent": "init",
         "iteration_count": 0,
         "web_findings": [],
         "knowledge_base_chunks": [],
+        "retrieved_document_chunks": [],
         "raw_insights": [],
+        "nl_synthesis": None,
         "validation_issues": [],
+        "missing_information": [],
+        "conflicts": [],
         "final_report": {},
         "errors": [],
     }
@@ -56,31 +74,48 @@ async def run_query(
     report = result.get("final_report", {})
     insights = list(report.get("competitors", {}).values())
 
+    # Build comprehensive metrics and citations
+    metrics = [m for i in insights for m in i.get("key_metrics", [])][:20]
+    citations = report.get("citations", []) or [c for i in insights for c in i.get("citations", [])][:15]
+
     response = {
         "query": query,
-        "summary": " ".join(i.get("summary", "") for i in insights[:3]),
-        "key_metrics": [m for i in insights for m in i.get("key_metrics", [])][:20],
-        "citations": [c for i in insights for c in i.get("citations", [])][:15],
+        "selected_mode": selected_mode,
+        "selected_agents": report.get("selected_agents", []),
+        "plan_rationale": report.get("plan_rationale", ""),
+        "source_scope": source_scope,
+        "primary_agent": report.get("primary_agent", "LangGraph Orchestrator"),
+        "summary": report.get("summary") or " ".join(i.get("summary", "") for i in insights[:3]),
+        "key_metrics": metrics,
+        "citations": citations,
         "confidence_score": report.get("overall_confidence", 0.0),
         "sub_query_count": len(insights),
         "competitors": report.get("competitors", {}),
         "validation_summary": report.get("validation_summary", {}),
+        "missing_information": report.get("missing_information", []),
+        "conflicts": report.get("conflicts", []),
         "agent_traces": {
+            "selected_mode": selected_mode,
+            "selected_agents": report.get("selected_agents", []),
+            "plan_rationale": report.get("plan_rationale", ""),
+            "source_scope": source_scope,
+            "primary_agent": report.get("primary_agent", "LangGraph Orchestrator"),
             "research_agent": {
-                "active": len(result.get("web_findings", [])) > 0,
+                "active": len(result.get("web_findings", [])) > 0 or selected_mode == "research",
                 "findings_count": len(result.get("web_findings", [])),
                 "findings": result.get("web_findings", [])[:6],
             },
             "rag_agent": {
-                "active": len(result.get("knowledge_base_chunks", [])) > 0,
+                "active": len(result.get("knowledge_base_chunks", [])) > 0 or selected_mode == "rag",
                 "chunks_count": len(result.get("knowledge_base_chunks", [])),
+                "uploaded_chunks_count": len(result.get("retrieved_document_chunks", [])),
             },
             "analysis_agent": {
-                "active": len(result.get("raw_insights", [])) > 0,
+                "active": len(result.get("raw_insights", [])) > 0 or selected_mode == "analysis",
                 "competitors_analyzed": len(insights),
             },
             "validation_agent": {
-                "active": True,
+                "active": len(result.get("validation_issues", [])) > 0 or selected_mode in ("validation", "auto"),
                 "issues_count": len(result.get("validation_issues", [])),
                 "confidence_score": report.get("overall_confidence", 0.0),
             },

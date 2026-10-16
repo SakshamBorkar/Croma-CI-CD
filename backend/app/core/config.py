@@ -14,7 +14,10 @@ from pathlib import Path
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=str(Path(__file__).resolve().parents[2] / ".env"),
+        env_file=(
+            str(Path(__file__).resolve().parents[3] / ".env"),
+            str(Path(__file__).resolve().parents[2] / ".env"),
+        ),
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -33,6 +36,7 @@ class Settings(BaseSettings):
 
     # ── Embedding Provider ──────────────────────────────────────
     EMBEDDING_PROVIDER: str = Field(default="local", description="Embedding provider: local | ollama")
+    LOCAL_EMBED_MODEL: str = "all-MiniLM-L6-v2"
     LOCAL_EMBED_DIMS: int = 384
 
     # ── Ollama ──────────────────────────────────────────────────

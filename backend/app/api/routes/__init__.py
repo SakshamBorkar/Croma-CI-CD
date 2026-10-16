@@ -17,27 +17,37 @@ from typing import Any, Dict, List, Optional
 from app.core.auth import UserContext, get_current_user
 from app.core.config import settings
 from app.rag.pipeline import run_query, compare_competitors, full_competitor_report
+from app.api.routes.documents import documents_router
+from app.api.routes.agentic import agentic_router
 
 query_router = APIRouter(prefix="/api/query", tags=["query"])
 
 
 class QueryRequest(BaseModel):
-    query: str = Field(..., min_length=5, max_length=500, description="Natural language query")
+    query: str = Field(..., min_length=3, max_length=1000, description="Natural language query")
     competitor: Optional[str] = Field(None, description="Filter to a specific competitor slug")
     ci_dimension: Optional[str] = Field(None, description="Filter to a specific CI dimension")
     use_cache: bool = Field(True, description="Use Redis cache (set False to force fresh retrieval)")
+    selected_mode: Optional[str] = Field("auto", description="Agent mode: auto | research | rag | analysis | validation")
+    source_scope: Optional[str] = Field("all_sources", description="Source scope: uploaded_only | croma_kb | uploaded_and_croma | all_sources")
+    selected_document_ids: Optional[List[str]] = Field(default=[], description="List of document IDs to query")
 
     model_config = {"json_schema_extra": {
         "example": {
             "query": "How does Vijay Sales compare to Reliance Digital on store expansion?",
             "competitor": None,
             "ci_dimension": "geographical_presence",
+            "selected_mode": "auto",
+            "source_scope": "all_sources",
         }
     }}
 
 
 class QueryResponse(BaseModel):
     query: str
+    selected_mode: Optional[str] = "auto"
+    source_scope: Optional[str] = "all_sources"
+    primary_agent: Optional[str] = "LangGraph Orchestrator"
     summary: str
     key_metrics: List[Dict[str, Any]] = []
     citations: List[Dict[str, Any]] = []
@@ -45,6 +55,8 @@ class QueryResponse(BaseModel):
     sub_query_count: int = 1
     competitors: Optional[Dict[str, Any]] = None
     validation_summary: Optional[Dict[str, Any]] = None
+    missing_information: Optional[List[str]] = []
+    conflicts: Optional[List[Dict[str, Any]]] = []
     agent_traces: Optional[Dict[str, Any]] = None
 
 
@@ -53,17 +65,23 @@ async def free_form_query(
     body: QueryRequest,
     current_user: UserContext = Depends(get_current_user),
 ) -> QueryResponse:
-    """Free-form NL query against the CI knowledge base."""
+    """Free-form NL query against the CI knowledge base and uploaded documents."""
     if body.competitor and body.competitor not in settings.COMPETITORS:
         raise HTTPException(400, f"Unknown competitor. Valid: {settings.COMPETITORS}")
     if body.ci_dimension and body.ci_dimension not in settings.CI_DIMENSIONS:
         raise HTTPException(400, f"Unknown dimension. Valid: {settings.CI_DIMENSIONS}")
+
+    user_id = getattr(current_user, "email", None) or getattr(current_user, "username", "demo_user")
 
     result = await run_query(
         body.query,
         competitor=body.competitor,
         ci_dimension=body.ci_dimension,
         use_cache=body.use_cache,
+        selected_mode=body.selected_mode or "auto",
+        source_scope=body.source_scope or "all_sources",
+        selected_document_ids=body.selected_document_ids,
+        user_id=user_id,
     )
     return QueryResponse(**result)
 

@@ -1,125 +1,43 @@
 /**
  * frontend/src/app/page.tsx
  * ──────────────────────────
- * Root page — auth gate + Multi-Agent Workflow centerpiece.
- *   Tab 1: Architecture Workflow → AgentWorkflow (LangGraph 4-Agent Orchestrator)
- *   Tab 2: Competitor Reports     → ReportView
- *   Tab 3: Sources Audit          → SourcesTable
- *   Tab 4: System Health          → Status & Provider details
+ * Root page — auth gate + Top Navigation Shell:
+ *   Option 1: Reports    → ReportView (Competitor dossiers)
+ *   Option 2: RAG mode   → AgentWorkflow (LangGraph Dynamic Multi-Agent System)
+ *   Option 3: Competitor → CompetitorMatrix (6x5 CI Matrix & Retail Landscape)
+ *   Option 4: Sources    → SourcesTable (Verified Audit Trail)
  */
 
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { getToken, clearToken, getHealth, type HealthResponse } from "@/lib/api";
+import { getToken, clearToken, type DimensionResult, COMPETITORS, CI_DIMENSIONS } from "@/lib/api";
 import LoginPage from "@/components/LoginPage";
 import AgentWorkflow from "@/components/AgentWorkflow";
 import ReportView from "@/components/ReportView";
+import CompetitorMatrix from "@/components/CompetitorMatrix";
 import SourcesTable from "@/components/SourcesTable";
+import DrillDown from "@/components/DrillDown";
 
-type Tab = "workflow" | "report" | "sources" | "health";
+type Tab = "reports" | "rag_mode" | "competitor" | "sources";
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
-  { id: "workflow", label: "Agent Architecture", icon: "⚡" },
-  { id: "report", label: "Reports", icon: "≡" },
+  { id: "reports", label: "Reports", icon: "≡" },
+  { id: "rag_mode", label: "RAG mode", icon: "⚡" },
+  { id: "competitor", label: "Competitor", icon: "⊞" },
   { id: "sources", label: "Sources", icon: "⊕" },
-  { id: "health", label: "Health", icon: "♡" },
 ];
 
-// ── Health tab ────────────────────────────────────────────────────
-function HealthTab() {
-  const [data, setData] = useState<HealthResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    getHealth().then(setData).catch(console.error).finally(() => setLoading(false));
-  }, []);
-
-  if (loading) return <p className="text-zinc-500 text-sm">Checking system status…</p>;
-  if (!data) return <p className="text-red-400 text-sm">Could not reach backend.</p>;
-
-  const isHealthy = data.status === "healthy";
-
-  return (
-    <div className="space-y-5 max-w-4xl mx-auto">
-      <div
-        className={`flex items-center gap-3 px-5 py-4 rounded-2xl border ${
-          isHealthy
-            ? "bg-emerald-950/30 border-emerald-800/60 text-emerald-300"
-            : "bg-amber-950/30 border-amber-800/60 text-amber-300"
-        }`}
-      >
-        <span className={`w-3 h-3 rounded-full ${isHealthy ? "bg-emerald-400" : "bg-amber-400"}`} />
-        <span className="font-semibold text-sm">
-          System {isHealthy ? "Healthy & Operational" : "Degraded"}
-        </span>
-        <span className="text-xs text-zinc-400 ml-auto">{data.timestamp}</span>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Component cards */}
-        {Object.entries(data.components).map(([name, comp]) => (
-          <div key={name} className="p-5 rounded-2xl border border-zinc-800 bg-[#121216]">
-            <div className="flex items-center gap-2 mb-2">
-              <span className={`w-2 h-2 rounded-full ${comp.ok ? "bg-emerald-400" : "bg-red-400"}`} />
-              <span className="font-semibold text-zinc-100 text-sm capitalize">{name}</span>
-              <span
-                className={`ml-auto text-xs font-semibold px-2.5 py-0.5 rounded-full ${
-                  comp.ok
-                    ? "bg-emerald-500/10 border border-emerald-500/30 text-emerald-400"
-                    : "bg-red-500/10 border border-red-500/30 text-red-400"
-                }`}
-              >
-                {comp.ok ? "ONLINE" : "UNAVAILABLE"}
-              </span>
-            </div>
-            {comp.models && comp.models.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 mt-2">
-                {comp.models.map((m) => (
-                  <span key={m} className="text-[11px] px-2 py-0.5 bg-zinc-800 text-zinc-300 rounded font-mono">
-                    {m}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
-
-        {/* Runtime info */}
-        <div className="p-5 rounded-2xl border border-zinc-800 bg-[#121216]">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="w-2 h-2 rounded-full bg-blue-400" />
-            <span className="font-semibold text-zinc-100 text-sm">LLM Runtime</span>
-            <span className="ml-auto text-xs font-semibold px-2.5 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-400">
-              GROQ CLOUD
-            </span>
-          </div>
-          <p className="text-xs text-zinc-400 mt-2">
-            Model: <code className="bg-zinc-800 text-zinc-200 px-1.5 py-0.5 rounded font-mono">openai/gpt-oss-120b</code> (High-speed Llama-3 synthesis)
-          </p>
-        </div>
-
-        <div className="p-5 rounded-2xl border border-zinc-800 bg-[#121216]">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="w-2 h-2 rounded-full bg-purple-400" />
-            <span className="font-semibold text-zinc-100 text-sm">Vector Embeddings</span>
-            <span className="ml-auto text-xs font-semibold px-2.5 py-0.5 rounded-full bg-purple-500/10 border border-purple-500/30 text-purple-400">
-              LOCAL ONNX
-            </span>
-          </div>
-          <p className="text-xs text-zinc-400 mt-2">
-            Model: <code className="bg-zinc-800 text-zinc-200 px-1.5 py-0.5 rounded font-mono">all-MiniLM-L6-v2</code> (384-dim local vector search)
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Root page ─────────────────────────────────────────────────────
 export default function HomePage() {
   const [authed, setAuthed] = useState(false);
-  const [activeTab, setActiveTab] = useState<Tab>("workflow");
+  const [activeTab, setActiveTab] = useState<Tab>("reports");
+
+  // Drilldown state (from matrix click)
+  const [drilldown, setDrilldown] = useState<{
+    competitor: string;
+    dimension: string;
+    data: DimensionResult;
+  } | null>(null);
 
   // Check for existing token
   useEffect(() => {
@@ -129,6 +47,11 @@ export default function HomePage() {
   if (!authed) {
     return <LoginPage onLogin={() => setAuthed(true)} />;
   }
+
+  const competitorDisplay = (slug: string) =>
+    COMPETITORS.find((c) => c.slug === slug)?.display ?? slug;
+  const dimensionDisplay = (slug: string) =>
+    CI_DIMENSIONS.find((d) => d.slug === slug)?.display ?? slug;
 
   return (
     <div className="min-h-screen bg-[#070709] text-zinc-100 antialiased selection:bg-zinc-800 selection:text-white">
@@ -150,13 +73,13 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Navigation Tabs */}
+          {/* Navigation Tabs: Reports, RAG mode, Competitor, Sources */}
           <div className="flex items-center gap-1.5 bg-[#141419] border border-zinc-800/90 rounded-xl p-1">
             {TABS.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                   activeTab === tab.id
                     ? "bg-white text-zinc-900 shadow-sm"
                     : "text-zinc-400 hover:text-white hover:bg-zinc-800/50"
@@ -183,20 +106,13 @@ export default function HomePage() {
 
       {/* ── Main Content Area ───────────────────────────────────── */}
       <main className="max-w-6xl mx-auto px-6 py-8">
-        {/* Tab: Agent Architecture Workflow (Primary) */}
-        {activeTab === "workflow" && (
-          <section className="animate-fadeIn">
-            <AgentWorkflow />
-          </section>
-        )}
-
-        {/* Tab: Competitor Reports */}
-        {activeTab === "report" && (
+        {/* Tab 1: Reports */}
+        {activeTab === "reports" && (
           <section className="space-y-6 animate-fadeIn">
             <div className="text-center space-y-1">
-              <h1 className="text-2xl font-bold text-white tracking-tight">Competitor Intelligence Dossiers</h1>
+              <h1 className="text-2xl font-bold text-white tracking-tight">Competitor Intelligence Reports</h1>
               <p className="text-zinc-400 text-xs">
-                Deep multi-dimensional analysis compiled across all retail competitor entities.
+                Comprehensive multi-dimensional intelligence dossiers compiled across all retail competitor entities.
               </p>
             </div>
             <div className="bg-[#0f0f13] rounded-3xl border border-zinc-800 p-6 md:p-8 shadow-xl">
@@ -205,7 +121,25 @@ export default function HomePage() {
           </section>
         )}
 
-        {/* Tab: Sources Audit Table */}
+        {/* Tab 2: RAG mode (LangGraph Orchestrator & Dynamic Multi-Agent Workflow) */}
+        {activeTab === "rag_mode" && (
+          <section className="animate-fadeIn">
+            <AgentWorkflow />
+          </section>
+        )}
+
+        {/* Tab 3: Competitor (Competitor Landscape & 6x5 Intelligence Matrix) */}
+        {activeTab === "competitor" && (
+          <section className="animate-fadeIn">
+            <CompetitorMatrix
+              onCellClick={(competitor, dimension, data) =>
+                setDrilldown({ competitor, dimension, data })
+              }
+            />
+          </section>
+        )}
+
+        {/* Tab 4: Sources Audit Table */}
         {activeTab === "sources" && (
           <section className="space-y-6 animate-fadeIn">
             <div className="text-center space-y-1">
@@ -219,22 +153,19 @@ export default function HomePage() {
             </div>
           </section>
         )}
-
-        {/* Tab: System Health */}
-        {activeTab === "health" && (
-          <section className="space-y-6 animate-fadeIn">
-            <div className="text-center space-y-1">
-              <h1 className="text-2xl font-bold text-white tracking-tight">System Infrastructure Health</h1>
-              <p className="text-zinc-400 text-xs">
-                Status of Groq API, PostgreSQL 16, Redis Cache, and local ONNX vector engines.
-              </p>
-            </div>
-            <div className="bg-[#0f0f13] rounded-3xl border border-zinc-800 p-6 md:p-8 shadow-xl">
-              <HealthTab />
-            </div>
-          </section>
-        )}
       </main>
+
+      {/* ── DrillDown Slide-over ───────────────────────────────── */}
+      {drilldown && (
+        <DrillDown
+          competitor={drilldown.competitor}
+          competitorDisplay={competitorDisplay(drilldown.competitor)}
+          dimension={drilldown.dimension}
+          dimensionDisplay={dimensionDisplay(drilldown.dimension)}
+          data={drilldown.data}
+          onClose={() => setDrilldown(null)}
+        />
+      )}
     </div>
   );
 }
