@@ -13,18 +13,19 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# Install Playwright browsers (headless Chromium)
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 RUN playwright install chromium --with-deps || true
 
 # ── Runtime stage ──────────────────────────────────────────────
 FROM python:3.11-slim AS runtime
 
 WORKDIR /app
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
 # Only copy installed packages from builder
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
-COPY --from=builder /root/.cache/ms-playwright /root/.cache/ms-playwright
+COPY --from=builder /ms-playwright /ms-playwright
 
 # System runtime libs
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -38,7 +39,8 @@ COPY . .
 # Non-root user
 RUN useradd -m -u 1000 appuser && \
     mkdir -p /app/chroma_db && \
-    chown -R appuser:appuser /app
+    chown -R appuser:appuser /app && \
+    chmod -R 755 /ms-playwright
 USER appuser
 
 EXPOSE 8000

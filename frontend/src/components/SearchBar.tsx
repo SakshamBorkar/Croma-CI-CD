@@ -55,7 +55,7 @@ export default function SearchBar() {
     }
   };
 
-  const useExample = (q: string) => {
+  const handleSelectExample = (q: string) => {
     setQuery(q);
     inputRef.current?.focus();
   };
@@ -128,7 +128,7 @@ export default function SearchBar() {
           {EXAMPLE_QUERIES.map((q) => (
             <button
               key={q}
-              onClick={() => useExample(q)}
+              onClick={() => handleSelectExample(q)}
               className="text-xs px-3 py-1.5 rounded-full border border-slate-200 text-slate-600 hover:border-slate-400 hover:text-slate-800 transition-colors bg-white"
             >
               {q.length > 55 ? q.slice(0, 52) + "…" : q}

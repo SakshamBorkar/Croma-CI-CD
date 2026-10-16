@@ -89,7 +89,7 @@ export default function CitationBadge({ citation, index }: Props) {
         {/* Excerpt */}
         {citation.excerpt && (
           <p className="mt-1 text-xs text-slate-500 italic leading-relaxed line-clamp-2">
-            "{citation.excerpt}"
+            &ldquo;{citation.excerpt}&rdquo;
           </p>
         )}
       </div>

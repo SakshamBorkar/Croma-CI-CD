@@ -185,8 +185,20 @@ def orchestrator_finalize(state: CIPipelineState) -> Dict[str, Any]:
 def route_orchestrator(
     state: CIPipelineState,
 ) -> Literal["research_agent", "rag_agent", "analysis_agent"]:
+    mode = state.get("selected_mode")
+    if mode == "research":
+        return "research_agent"
+    if mode in ("rag", "analysis", "validation"):
+        return "rag_agent"
+    if mode == "auto":
+        if state.get("needs_web_research") or "research_agent" in state.get("selected_agents", []):
+            return "research_agent"
+        if state.get("needs_rag_retrieval") or "rag_agent" in state.get("selected_agents", []):
+            return "rag_agent"
+        return "analysis_agent"
+
     selected = state.get("selected_agents", [])
-    if "research_agent" in selected:
+    if "research_agent" in selected or state.get("needs_web_research"):
         return "research_agent"
     if "rag_agent" in selected:
         return "rag_agent"
@@ -198,23 +210,49 @@ route_planning_edge = route_orchestrator
 
 def route_after_research(
     state: CIPipelineState,
-) -> Literal["rag_agent", "analysis_agent"]:
+) -> Literal["rag_agent", "analysis_agent", "report_assembler"]:
+    mode = state.get("selected_mode")
+    if mode == "research":
+        return "report_assembler"
+    if mode == "auto":
+        return "rag_agent"
+
     selected = state.get("selected_agents", [])
     if "rag_agent" in selected:
         return "rag_agent"
-    return "analysis_agent"
+    if "analysis_agent" in selected:
+        return "analysis_agent"
+    return "report_assembler"
 
 
 def route_after_rag(
     state: CIPipelineState,
-) -> Literal["analysis_agent"]:
-    # Always route retrieved chunks to analysis agent to produce a rich Natural Language answer
+) -> Literal["analysis_agent", "validation_agent", "report_assembler"]:
+    mode = state.get("selected_mode")
+    if mode == "rag":
+        return "report_assembler"
+    if mode == "validation":
+        return "validation_agent"
+    if mode in ("analysis", "auto"):
+        return "analysis_agent"
+
+    selected = state.get("selected_agents", [])
+    if "analysis_agent" in selected:
+        return "analysis_agent"
+    if "validation_agent" in selected:
+        return "validation_agent"
     return "analysis_agent"
 
 
 def route_after_analysis(
     state: CIPipelineState,
 ) -> Literal["validation_agent", "report_assembler"]:
+    mode = state.get("selected_mode")
+    if mode == "analysis":
+        return "report_assembler"
+    if mode == "auto":
+        return "validation_agent"
+
     selected = state.get("selected_agents", [])
     if "validation_agent" in selected:
         return "validation_agent"
@@ -252,11 +290,20 @@ def build_ci_orchestrator():
         {
             "rag_agent": "rag_agent",
             "analysis_agent": "analysis_agent",
+            "report_assembler": "report_assembler",
         },
     )
 
-    # RAG Agent always feeds into Analysis Agent for Natural Language generation
-    builder.add_edge("rag_agent", "analysis_agent")
+    # Conditional routing after RAG Agent
+    builder.add_conditional_edges(
+        "rag_agent",
+        route_after_rag,
+        {
+            "analysis_agent": "analysis_agent",
+            "validation_agent": "validation_agent",
+            "report_assembler": "report_assembler",
+        },
+    )
 
     # Conditional routing after Analysis Agent
     builder.add_conditional_edges(
