@@ -26,7 +26,15 @@ class Settings(BaseSettings):
     APP_NAME: str = "Croma CI Platform"
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = False
-    ALLOWED_ORIGINS: List[str] = ["http://localhost:3000", "https://croma-ci.vercel.app"]
+    ALLOWED_ORIGINS: List[str] = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3001",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+        "https://croma-ci.vercel.app",
+    ]
 
     # ── Groq LLM (High-speed cloud inference) ────────────────────
     GROQ_API_KEY: str = Field(default="", description="Groq API key")

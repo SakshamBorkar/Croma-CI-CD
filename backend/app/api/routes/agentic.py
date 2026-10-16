@@ -45,6 +45,8 @@ class AgenticQueryResponse(BaseModel):
     validation_summary: Optional[Dict[str, Any]] = None
     missing_information: Optional[List[str]] = []
     conflicts: Optional[List[Dict[str, Any]]] = []
+    selected_agents: Optional[List[str]] = []
+    plan_rationale: Optional[str] = ""
     agent_traces: Optional[Dict[str, Any]] = None
 
 
