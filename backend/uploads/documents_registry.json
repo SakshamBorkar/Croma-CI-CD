@@ -1,16 +1,16 @@
 {
-  "doc_6ce6ef799a7a": {
-    "document_id": "doc_6ce6ef799a7a",
+  "doc_4e2c9cce040f": {
+    "document_id": "doc_4e2c9cce040f",
     "user_id": "sakshamborkar23@gmail.com",
-    "filename": "Assignment_Instructions_PRPE29.pdf",
+    "filename": "Fastspeech 2.pdf",
     "file_type": "pdf",
-    "file_size": 167333,
-    "storage_path": "D:\\Data_Analytics_1\\croma-ci-complete\\croma-ci\\backend\\uploads\\doc_6ce6ef799a7a_Assignment_Instructions_PRPE29.pdf",
-    "created_at": "2026-10-16T16:28:34.840914",
+    "file_size": 1273673,
+    "storage_path": "D:\\Data_Analytics_1\\croma-ci-complete\\croma-ci\\backend\\uploads\\doc_4e2c9cce040f_Fastspeech_2.pdf",
+    "created_at": "2026-10-16T16:39:51.456978",
     "status": "ready",
     "stage": "ready",
-    "chunk_count": 4,
-    "page_count": 1,
+    "chunk_count": 71,
+    "page_count": 15,
     "error_message": null
   }
 }
